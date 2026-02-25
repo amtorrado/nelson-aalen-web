@@ -181,6 +181,17 @@ def analizar(tiempos_str):
     tiempos = sorted([float(x.strip()) for x in tiempos_str.split(",") if x.strip()])
     n = len(tiempos)
 
+# AGREGAR AL INICIO:
+if n < 3:
+    raise ValueError("Se requieren al menos 3 datos para el análisis")
+    
+if any(t <= 0 for t in tiempos):
+    raise ValueError("Los tiempos deben ser positivos")
+
+if tiempos != sorted(set(tiempos)):
+    # Opcional: advertir sobre tiempos duplicados
+    pass
+
     # Nelson-Aalen
     H = list(np.cumsum([1/(n-i) for i in range(n)]))
 
@@ -367,4 +378,5 @@ function toggleTabla() {
 }
 </script>
 </body>
+
 </html>
