@@ -4,143 +4,454 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Análisis de Confiabilidad — Nelson-Aalen</title>
-
   <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #1c2b2b; color: #e8ede8; font-family: 'Inter', system-ui, sans-serif; min-height: 100vh; }
 
+    header { background: #162020; padding: 32px 24px; text-align: center; border-bottom: 2px solid #7a9e7e; }
+    header h1 { font-size: 2rem; color: #a8c5a0; }
+    header p  { color: #7a9e7e; margin-top: 6px; font-size: 1rem; letter-spacing: 0.05em; }
+
+    .container { max-width: 900px; margin: 40px auto; padding: 0 20px; }
+
+    .card { background: #1e2e2e; border-radius: 10px; padding: 28px; margin-bottom: 28px; border: 1px solid #2e4040; }
+
+    label { display: block; margin-bottom: 8px; color: #9ab89a; font-size: 0.9rem; font-weight: 600; }
+
+    textarea, input[type="text"] {
+      width: 100%; padding: 12px; border-radius: 8px;
+      background: #162020; border: 1px solid #3d5c3d;
+      color: #e8ede8; font-size: 1rem; resize: vertical;
+      margin-bottom: 16px;
+    }
+    textarea:focus, input[type="text"]:focus { outline: none; border-color: #7a9e7e; }
+
+    .btn-primary {
+      width: 100%; padding: 14px; background: #3d6b45; color: #e8ede8;
+      border: none; border-radius: 8px; font-size: 1rem; font-weight: 700;
+      cursor: pointer; transition: background 0.2s; letter-spacing: 0.03em;
+    }
+    .btn-primary:hover:not(:disabled) { background: #4e8a58; }
+    .btn-primary:disabled { background: #2a3d2a; color: #555; cursor: not-allowed; }
+
+    .btn-secondary {
+      width: 100%; padding: 12px; background: transparent; color: #9ab89a;
+      border: 1px solid #3d5c3d; border-radius: 8px; font-size: 0.95rem;
+      cursor: pointer; margin-top: 10px; transition: background 0.2s;
+    }
+    .btn-secondary:hover { background: #162020; }
+
+    .spinner { display: flex; align-items: center; gap: 12px; color: #7a9e7e; font-size: 0.95rem; margin-bottom: 16px; }
+    .spinner-circle { width: 20px; height: 20px; border: 3px solid #2e4040; border-top-color: #7a9e7e; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-msg { background: #2e1a1a; border: 1px solid #7a3a3a; color: #c49a9a; padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 0.9rem; }
+
+    .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 8px; }
+    .metric { background: #162020; border-radius: 8px; padding: 16px; text-align: center; border: 1px solid #2e4040; }
+    .metric-label { font-size: 0.78rem; color: #7a9e7e; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.08em; }
+    .metric-value { font-size: 1.4rem; font-weight: 700; color: #a8c5a0; }
+
+    .section-title { font-size: 1rem; font-weight: 700; color: #a8c5a0; margin-bottom: 16px; border-bottom: 1px solid #2e4040; padding-bottom: 8px; text-transform: uppercase; letter-spacing: 0.08em; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th { background: #162020; color: #a8c5a0; padding: 10px; text-align: center; text-transform: uppercase; font-size: 0.78rem; letter-spacing: 0.06em; }
+    td { padding: 8px 10px; text-align: center; border-bottom: 1px solid #2e4040; color: #c8d8c8; }
+    tr:hover td { background: #1e3030; }
+
+    .toggle-btn { background: none; border: none; color: #7a9e7e; cursor: pointer; font-size: 0.9rem; margin-bottom: 12px; padding: 0; }
+    .toggle-btn:hover { color: #a8c5a0; }
+
+    #resultados { display: none; }
+    #spinner-calculo { display: none; }
+  </style>
 </head>
-<body style="background:#1c2b2b;color:white;font-family:Arial;padding:20px;">
+<body>
 
-<h2>Análisis de Confiabilidad — Nelson-Aalen</h2>
+<header>
+  <h1>Análisis de Confiabilidad</h1>
+  <p>Nelson-Aalen · Estimador de Riesgo Acumulado</p>
+</header>
 
-<input type="text" id="nombre-rack" placeholder="Nombre del equipo (opcional)" style="width:100%;padding:10px;margin-bottom:10px;">
+<div class="container">
 
-<textarea id="horas-input" rows="3" placeholder="Ej: 120, 340, 780, 1200"
-style="width:100%;padding:10px;margin-bottom:10px;"></textarea>
+  <!-- EXPLICACIÓN -->
+  <div class="card">
+    <div class="section-title">¿Qué es el diagrama de Nelson-Aalen?</div>
+    <p style="line-height: 1.8; color: #c8d8c8; font-size: 0.97rem;">
+      El diagrama de <strong style="color:#a8c5a0;">Nelson-Aalen</strong> es una herramienta gráfica utilizada en mantenimiento
+      para analizar la confiabilidad de sistemas reparables. Permite visualizar la acumulación de fallas frente al tiempo
+      de operación para determinar si la frecuencia de fallas
+      <strong style="color:#e07070;">aumenta (deterioro)</strong>,
+      <strong style="color:#7ab87a;">disminuye</strong> o
+      <strong style="color:#c8b870;">se mantiene constante</strong>.
+    </p>
+  </div>
 
-<button onclick="ejecutarAnalisis()" id="btn-analizar">Cargando motor...</button>
+  <!-- PANEL DE ENTRADA -->
+  <div class="card" id="panel-entrada">
+    <div class="section-title">Datos de entrada</div>
 
-<div id="error-msg" style="color:red;margin-top:10px;"></div>
+    <label for="nombre-rack">Nombre del equipo (opcional)</label>
+    <input type="text" id="nombre-rack" placeholder="Ej: Planta, Bomba, Compresor..." />
 
-<div id="resultados" style="display:none;margin-top:30px;">
-  <h3 id="titulo"></h3>
-  <p><strong>Fallas:</strong> <span id="res-fallas"></span></p>
-  <p><strong>Tiempo máximo:</strong> <span id="res-tiempo"></span></p>
-  <p><strong>Riesgo acumulado:</strong> <span id="res-riesgo"></span></p>
-  <p><strong>Comportamiento:</strong> <span id="res-comportamiento"></span></p>
+    <label for="horas-input">Horas de falla (separadas por coma)</label>
+    <textarea id="horas-input" rows="3" placeholder="Ej: 120, 340, 780, 1200, 2100"></textarea>
 
-  <div id="grafico" style="height:500px;"></div>
+    <div id="error-msg" class="error-msg" style="display:none;"></div>
+
+    <div id="spinner-calculo">
+      <div class="spinner">
+        <div class="spinner-circle"></div>
+        Calculando...
+      </div>
+    </div>
+
+    <button class="btn-primary" id="btn-analizar" onclick="ejecutarAnalisis()">
+      ▶ Analizar
+    </button>
+    <button class="btn-secondary" id="btn-limpiar" onclick="limpiar()" style="display:none;">
+      ✕ Limpiar
+    </button>
+  </div>
+
+  <!-- RESULTADOS -->
+  <div id="resultados">
+
+    <div class="card">
+      <div class="section-title">Resumen del análisis</div>
+      <div class="metrics">
+        <div class="metric"><div class="metric-label">Fallas totales</div><div class="metric-value" id="res-fallas">—</div></div>
+        <div class="metric"><div class="metric-label">Tiempo observado</div><div class="metric-value" id="res-tiempo">—</div></div>
+        <div class="metric"><div class="metric-label">Riesgo acumulado H(t)</div><div class="metric-value" id="res-riesgo">—</div></div>
+        <div class="metric"><div class="metric-label">Comportamiento</div><div class="metric-value" id="res-comportamiento">—</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Estimador Nelson-Aalen</div>
+      <div id="grafico-nelson" style="height:520px;"></div>
+    </div>
+
+    <div class="card">
+      <button class="toggle-btn" onclick="toggleTabla()">▼ Ver tabla detallada</button>
+      <div id="tabla-container" style="display:none; overflow-x:auto;">
+        <table>
+          <thead><tr><th>N° Falla</th><th>Tiempo (h)</th><th>En Riesgo</th><th>Incremento</th><th>H(t)</th></tr></thead>
+          <tbody id="tabla-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
 </div>
 
 <script>
-let pyodide = null;
+// ── Utilidades matemáticas en JS puro ──────────────────────────────────────
 
-async function cargarPyodide() {
-  pyodide = await loadPyodide();
-  await pyodide.loadPackage(["numpy"]);   // ✅ SOLO NUMPY
-  document.getElementById("btn-analizar").innerText = "Analizar";
+function linspace(start, end, num) {
+  const arr = [];
+  const step = (end - start) / (num - 1);
+  for (let i = 0; i < num; i++) arr.push(start + step * i);
+  return arr;
 }
-cargarPyodide();
 
-const codigoPython = `
-import numpy as np
-import json
+function cumsum(arr) {
+  const out = [];
+  let acc = 0;
+  for (const v of arr) { acc += v; out.push(acc); }
+  return out;
+}
 
-def analizar(tiempos_str):
-    tiempos = sorted([float(x.strip()) for x in tiempos_str.split(",") if x.strip()])
-    n = len(tiempos)
+function mean(arr) {
+  return arr.reduce((a, b) => a + b, 0) / arr.length;
+}
 
-    if n < 3:
-        raise ValueError("Se requieren al menos 3 datos")
-    if any(t <= 0 for t in tiempos):
-        raise ValueError("Los tiempos deben ser positivos")
+// Regresión lineal simple → { slope, intercept, r2 }
+function linreg(x, y) {
+  const n = x.length;
+  const mx = mean(x), my = mean(y);
+  let sxy = 0, sxx = 0;
+  for (let i = 0; i < n; i++) { sxy += (x[i]-mx)*(y[i]-my); sxx += (x[i]-mx)**2; }
+  const slope = sxy / sxx;
+  const intercept = my - slope * mx;
+  // r²
+  let ss_res = 0, ss_tot = 0;
+  for (let i = 0; i < n; i++) {
+    ss_res += (y[i] - (slope*x[i]+intercept))**2;
+    ss_tot += (y[i] - my)**2;
+  }
+  const r2 = ss_tot > 0 ? 1 - ss_res/ss_tot : 1;
+  return { slope, intercept, r2 };
+}
 
-    H = list(np.cumsum([1/(n-i) for i in range(n)]))
+// Ajuste polinomial grado 2 por mínimos cuadrados
+// Devuelve [a, b, c] tal que y ≈ a*x² + b*x + c
+function polyfit2(x, y) {
+  const n = x.length;
+  // Armar sistema 3x3: X^T X · coef = X^T y
+  let s0=n, s1=0, s2=0, s3=0, s4=0;
+  let r0=0, r1=0, r2=0;
+  for (let i=0; i<n; i++) {
+    const xi = x[i], yi = y[i];
+    s1+=xi; s2+=xi**2; s3+=xi**3; s4+=xi**4;
+    r0+=yi; r1+=xi*yi; r2+=xi**2*yi;
+  }
+  // [s0 s1 s2] [c]   [r0]
+  // [s1 s2 s3] [b] = [r1]
+  // [s2 s3 s4] [a]   [r2]
+  // Gauss elimination 3x3
+  let A = [[s0,s1,s2,r0],[s1,s2,s3,r1],[s2,s3,s4,r2]];
+  for (let col=0; col<3; col++) {
+    // pivot
+    let maxRow = col;
+    for (let row=col+1; row<3; row++) if (Math.abs(A[row][col]) > Math.abs(A[maxRow][col])) maxRow=row;
+    [A[col], A[maxRow]] = [A[maxRow], A[col]];
+    for (let row=col+1; row<3; row++) {
+      const f = A[row][col] / A[col][col];
+      for (let k=col; k<=3; k++) A[row][k] -= f*A[col][k];
+    }
+  }
+  const res = [0,0,0];
+  for (let i=2; i>=0; i--) {
+    res[i] = A[i][3];
+    for (let j=i+1; j<3; j++) res[i] -= A[i][j]*res[j];
+    res[i] /= A[i][i];
+  }
+  // res = [c, b, a]
+  return [res[2], res[1], res[0]]; // [a, b, c]
+}
 
-    # Ajuste lineal
-    slope, intercept = np.polyfit(tiempos, H, 1)
-    linea_lineal = np.polyval([slope, intercept], tiempos)
+function polyval2(coef, x) {
+  const [a, b, c] = coef;
+  return x.map(xi => a*xi**2 + b*xi + c);
+}
 
-    ss_res = np.sum((np.array(H) - linea_lineal)**2)
-    ss_tot = np.sum((np.array(H) - np.mean(H))**2)
-    r2_lineal = 1 - (ss_res/ss_tot) if ss_tot > 0 else 1.0
+function r2score(yTrue, yPred) {
+  const my = mean(yTrue);
+  let ss_res=0, ss_tot=0;
+  for (let i=0; i<yTrue.length; i++) {
+    ss_res += (yTrue[i]-yPred[i])**2;
+    ss_tot += (yTrue[i]-my)**2;
+  }
+  return ss_tot > 0 ? 1 - ss_res/ss_tot : 1;
+}
 
-    # Ajuste polinomial
-    coef = np.polyfit(tiempos, H, 2)
-    linea_poly = np.polyval(coef, tiempos)
-    ss_res2 = np.sum((np.array(H) - linea_poly)**2)
-    r2_poly = 1 - (ss_res2/ss_tot) if ss_tot > 0 else 1.0
+// Spline cúbico natural (interpolación)
+function cubicSpline(xs, ys) {
+  const n = xs.length - 1;
+  const h = [], alpha = [], l = [], mu = [], z = [], c = [], b = [], d = [];
+  for (let i=0; i<n; i++) h.push(xs[i+1]-xs[i]);
+  for (let i=1; i<n; i++) alpha.push(3*(ys[i+1]-ys[i])/h[i] - 3*(ys[i]-ys[i-1])/h[i-1]);
+  l[0]=1; mu[0]=0; z[0]=0;
+  for (let i=1; i<n; i++) {
+    l[i] = 2*(xs[i+1]-xs[i-1]) - h[i-1]*mu[i-1];
+    mu[i] = h[i]/l[i];
+    z[i] = (alpha[i-1] - h[i-1]*z[i-1]) / l[i];
+  }
+  l[n]=1; z[n]=0; c[n]=0;
+  for (let j=n-1; j>=0; j--) {
+    c[j] = z[j] - mu[j]*c[j+1];
+    b[j] = (ys[j+1]-ys[j])/h[j] - h[j]*(c[j+1]+2*c[j])/3;
+    d[j] = (c[j+1]-c[j])/(3*h[j]);
+  }
+  return function(t) {
+    // buscar intervalo
+    let i = 0;
+    for (let k=0; k<n-1; k++) if (t >= xs[k]) i=k;
+    const dx = t - xs[i];
+    return ys[i] + b[i]*dx + c[i]*dx**2 + d[i]*dx**3;
+  };
+}
 
-    a = coef[0]
+// ── Análisis principal ────────────────────────────────────────────────────
 
-    if abs(r2_poly - r2_lineal) < 0.01:
-        comportamiento, emoji = "LINEAL", "🟡"
-    elif a > 0:
-        comportamiento, emoji = "CONVEXA", "🔴"
-    else:
-        comportamiento, emoji = "CONCAVA", "🟢"
+function analizar(tiemposStr) {
+  const tiempos = tiemposStr.split(",")
+    .map(x => parseFloat(x.trim()))
+    .filter(x => !isNaN(x))
+    .sort((a,b) => a-b);
 
-    t_smooth = list(np.linspace(min(tiempos), max(tiempos), 200))
-    H_smooth = list(np.polyval(coef, t_smooth))
+  const n = tiempos.length;
+  if (n < 3) throw new Error("Se requieren al menos 3 datos para el análisis");
+  if (tiempos.some(t => t <= 0)) throw new Error("Los tiempos deben ser positivos");
 
-    return json.dumps({
-        "tiempos": tiempos,
-        "H": H,
-        "t_smooth": t_smooth,
-        "H_smooth": H_smooth,
-        "n": n,
-        "tiempo_max": max(tiempos),
-        "H_final": round(H[-1],4),
-        "comportamiento": comportamiento,
-        "emoji": emoji
-    })
-`;
+  // Nelson-Aalen
+  const H = cumsum(tiempos.map((_, i) => 1/(n-i)));
 
-async function ejecutarAnalisis() {
+  // Ajuste lineal
+  const lr = linreg(tiempos, H);
+  const r2_lineal = lr.r2;
 
-  const horasStr = document.getElementById("horas-input").value.trim();
-  const errorDiv = document.getElementById("error-msg");
-  errorDiv.innerText = "";
+  // Ajuste polinomial grado 2
+  const coef = polyfit2(tiempos, H);
+  const linea_poly = polyval2(coef, tiempos);
+  const r2_poly = r2score(H, linea_poly);
 
-  if (!horasStr) {
-    errorDiv.innerText = "Ingresa datos válidos.";
-    return;
+  const [a, b] = coef; // a=cuadrático, b=lineal
+
+  // Clasificación
+  const mejora_r2 = r2_poly - r2_lineal;
+  const t_range = tiempos[n-1] - tiempos[0];
+  const denom = b + a * t_range / 2;
+  const cambio_relativo = Math.abs(denom) > 1e-10 ? Math.abs(2*a*t_range/denom) : 0;
+  const rango_H = H[n-1] - H[0];
+  const curvatura_norm = (rango_H > 0 && t_range > 0) ? Math.abs(a * t_range**2 / rango_H) : 0;
+
+  const es_lineal = mejora_r2 < 0.01 && cambio_relativo < 0.05 && curvatura_norm < 0.03;
+
+  let comportamiento, emoji, interpretacion;
+  if (es_lineal) {
+    [comportamiento, emoji, interpretacion] = ["LINEAL", "🟡", "Tasa de fallas constante (Vida útil)"];
+  } else if (a > 0) {
+    [comportamiento, emoji, interpretacion] = ["CONVEXA", "🔴", "Tasa de fallas creciente (Desgaste)"];
+  } else {
+    [comportamiento, emoji, interpretacion] = ["CONCAVA", "🟢", "Tasa de fallas decreciente (Mejora)"];
   }
 
-  try {
-    await pyodide.runPythonAsync(codigoPython);
-    const resultadoStr = await pyodide.runPythonAsync(`analizar("${horasStr}")`);
-    const d = JSON.parse(resultadoStr);
+  // Curva suavizada
+  let t_smooth, H_smooth;
+  if (n >= 4) {
+    const spline = cubicSpline(tiempos, H);
+    t_smooth = linspace(tiempos[0], tiempos[n-1], 300);
+    H_smooth = t_smooth.map(t => spline(t));
+  } else {
+    t_smooth = linspace(tiempos[0], tiempos[n-1], 100);
+    H_smooth = polyval2(coef, t_smooth);
+  }
 
-    document.getElementById("res-fallas").innerText = d.n;
-    document.getElementById("res-tiempo").innerText = d.tiempo_max + " h";
-    document.getElementById("res-riesgo").innerText = d.H_final;
-    document.getElementById("res-comportamiento").innerText = d.emoji + " " + d.comportamiento;
+  return {
+    tiempos, H, t_smooth, H_smooth,
+    comportamiento, emoji, interpretacion,
+    n_fallas: n,
+    tiempo_max: tiempos[n-1],
+    H_final: +H[n-1].toFixed(4),
+    r2_lineal: +r2_lineal.toFixed(4),
+    r2_poly: +r2_poly.toFixed(4),
+    tabla: tiempos.map((t, i) => ({
+      falla: i+1,
+      tiempo: t,
+      en_riesgo: n-i,
+      incremento: +(1/(n-i)).toFixed(6),
+      H: +H[i].toFixed(6)
+    }))
+  };
+}
 
-    Plotly.newPlot("grafico", [
-      {
-        x: d.tiempos,
-        y: d.H,
-        mode: "lines",
-        line: {shape:"hv", width:3},
-        name:"Nelson-Aalen"
-      },
-      {
-        x: d.t_smooth,
-        y: d.H_smooth,
-        mode:"lines",
-        line:{dash:"dot"},
-        name:"Tendencia"
-      }
-    ]);
+// ── UI ───────────────────────────────────────────────────────────────────
 
-    document.getElementById("resultados").style.display = "block";
+function ejecutarAnalisis() {
+  const horasStr = document.getElementById("horas-input").value.trim();
+  const errorDiv = document.getElementById("error-msg");
+  errorDiv.style.display = "none";
 
-  } catch(e) {
-    errorDiv.innerText = e.message;
+  if (!horasStr) { mostrarError("⚠ Ingresa al menos 3 horas de falla separadas por coma."); return; }
+  const partes = horasStr.split(",").filter(x => x.trim() !== "");
+  if (partes.some(x => isNaN(parseFloat(x)))) { mostrarError("⚠ Verifica que los datos sean solo números separados por coma."); return; }
+  if (partes.length < 3) { mostrarError("⚠ Ingresa al menos 3 horas de falla para el análisis."); return; }
+
+  document.getElementById("spinner-calculo").style.display = "block";
+  document.getElementById("btn-analizar").disabled = true;
+
+  // setTimeout para que el spinner se renderice antes del cálculo
+  setTimeout(() => {
+    try {
+      const d = analizar(horasStr);
+      mostrarResultados(d);
+    } catch(e) {
+      mostrarError("⚠ Error en el cálculo: " + e.message);
+    } finally {
+      document.getElementById("spinner-calculo").style.display = "none";
+      document.getElementById("btn-analizar").disabled = false;
+    }
+  }, 30);
+}
+
+function mostrarResultados(d) {
+  const rack = document.getElementById("nombre-rack").value.trim() || "Equipo";
+
+  document.getElementById("res-fallas").textContent = d.n_fallas;
+  document.getElementById("res-tiempo").textContent = d.tiempo_max.toFixed(1) + " h";
+  document.getElementById("res-riesgo").textContent = d.H_final;
+  document.getElementById("res-comportamiento").textContent = d.emoji + " " + d.comportamiento;
+
+  const colorTendencia = d.comportamiento === "CONVEXA" ? "#e07070"
+                       : d.comportamiento === "CONCAVA" ? "#7ab87a"
+                       : "#c8b870";
+
+  Plotly.newPlot("grafico-nelson", [
+    {
+      x: d.tiempos, y: d.H,
+      mode: "lines",
+      line: { shape: "hv", color: "#a8c5a0", width: 3 },
+      name: "N(t) — Nelson-Aalen"
+    },
+    {
+      x: d.t_smooth, y: d.H_smooth,
+      mode: "lines",
+      line: { color: colorTendencia, width: 2.5, dash: "dot" },
+      name: "W(t) — Tendencia"
+    }
+  ], {
+    paper_bgcolor: "#162020",
+    plot_bgcolor: "#162020",
+    font: { color: "#c8d8c8", family: "Inter, system-ui" },
+    xaxis: {
+      title: { text: "Tiempo acumulado (horas)", font: { size: 13 } },
+      gridcolor: "#2e4040", zerolinecolor: "#2e4040"
+    },
+    yaxis: {
+      title: { text: "Riesgo acumulado H(t)", font: { size: 13 } },
+      gridcolor: "#2e4040", zerolinecolor: "#2e4040"
+    },
+    title: {
+      text: `Estimador Nelson-Aalen — ${rack}<br><sub>${d.comportamiento}: ${d.interpretacion}</sub>`,
+      font: { size: 15, color: "#a8c5a0" }
+    },
+    legend: {
+      orientation: "h", y: -0.18,
+      bgcolor: "rgba(0,0,0,0)", font: { size: 12 }
+    },
+    margin: { t: 90, b: 80, l: 70, r: 30 }
+  }, { responsive: true });
+
+  const tbody = document.getElementById("tabla-body");
+  tbody.innerHTML = d.tabla.map(r =>
+    `<tr><td>${r.falla}</td><td>${r.tiempo}</td><td>${r.en_riesgo}</td><td>${r.incremento}</td><td>${r.H}</td></tr>`
+  ).join("");
+
+  document.getElementById("resultados").style.display = "block";
+  document.getElementById("btn-limpiar").style.display = "block";
+  document.getElementById("resultados").scrollIntoView({ behavior: "smooth" });
+}
+
+function mostrarError(msg) {
+  const div = document.getElementById("error-msg");
+  div.textContent = msg;
+  div.style.display = "block";
+}
+
+function limpiar() {
+  document.getElementById("horas-input").value = "";
+  document.getElementById("nombre-rack").value = "";
+  document.getElementById("error-msg").style.display = "none";
+  document.getElementById("resultados").style.display = "none";
+  document.getElementById("btn-limpiar").style.display = "none";
+  document.getElementById("tabla-container").style.display = "none";
+}
+
+function toggleTabla() {
+  const c = document.getElementById("tabla-container");
+  const btn = document.querySelector(".toggle-btn");
+  if (c.style.display === "none") {
+    c.style.display = "block";
+    btn.textContent = "▲ Ocultar tabla";
+  } else {
+    c.style.display = "none";
+    btn.textContent = "▼ Ver tabla detallada";
   }
 }
 </script>
-
 </body>
 </html>
