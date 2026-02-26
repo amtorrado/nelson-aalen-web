@@ -181,16 +181,16 @@ def analizar(tiempos_str):
     tiempos = sorted([float(x.strip()) for x in tiempos_str.split(",") if x.strip()])
     n = len(tiempos)
 
-# AGREGAR AL INICIO:
-if n < 3:
-    raise ValueError("Se requieren al menos 3 datos para el análisis")
-    
-if any(t <= 0 for t in tiempos):
-    raise ValueError("Los tiempos deben ser positivos")
+    # Validaciones
+    if n < 3:
+        raise ValueError("Se requieren al menos 3 datos para el análisis")
+        
+    if any(t <= 0 for t in tiempos):
+        raise ValueError("Los tiempos deben ser positivos")
 
-if tiempos != sorted(set(tiempos)):
-    # Opcional: advertir sobre tiempos duplicados
-    pass
+    if tiempos != sorted(set(tiempos)):
+        # Opcional: advertir sobre tiempos duplicados
+        pass
 
     # Nelson-Aalen
     H = list(np.cumsum([1/(n-i) for i in range(n)]))
@@ -257,6 +257,7 @@ if tiempos != sorted(set(tiempos)):
                    "incremento": round(1/(n-i), 6), "H": round(H[i], 6)} for i in range(n)]
     })
 `;
+
 
 async function ejecutarAnalisis() {
   const horasStr = document.getElementById("horas-input").value.trim();
